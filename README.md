@@ -6,6 +6,10 @@ SQLite makes local setup easy; PostgreSQL on Neon provides persistent storage on
 Includes bug creation, status/severity filters, backend-enforced status rules, status history,
 a demo login, and automated API tests.
 
+**Live demo:** https://mini-bug-tracker-teal.vercel.app  
+**Login:** `demo` / `bugtracker-demo`  
+**Repository:** https://github.com/camilosolanoa/mini-bug-tracker
+
 ## Run locally
 
 Requires Python 3.11+ and Node.js 22.12+ (tested with Python 3.13 and Node 22.15).
@@ -101,6 +105,9 @@ The build installs and bundles the React app. Add a **Neon Free** database to th
 Vercel project and set `SESSION_SECRET` as a secret environment variable, then deploy.
 Vercel deployments require `DATABASE_URL`; they never silently fall back to a local file.
 Secrets and local databases are excluded from Git and deployment uploads.
+The current deployment is managed with `vercel deploy --prod` from the project folder.
+Automatic GitHub deployments are not connected; they require a GitHub login connection
+in the Vercel account. GitHub Actions checks still run automatically.
 
 If you customize the demo account, also update the login page's demo hint.
 The default cookie session is intentionally simple: logout clears the browser cookie;
