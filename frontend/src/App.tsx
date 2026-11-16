@@ -171,7 +171,8 @@ function Workspace({ username, onLogout }: { username: string; onLogout: () => v
               </div>
               <button className="secondary refresh" onClick={() => setRefresh(value => value + 1)} disabled={loading}>Refresh</button>
             </div>
-            {loading ? <div className="empty" role="status">Loading bugs…</div>
+            {loading && bugs.length > 0 && <p className="muted" role="status">Updating list…</p>}
+            {loading && bugs.length === 0 ? <div className="empty" role="status">Loading bugs…</div>
               : listError ? <div className="empty error" role="alert">{listError}</div>
               : bugs.length === 0 ? <div className="empty">
                 <span className="empty-icon" aria-hidden="true">✓</span>
@@ -188,12 +189,12 @@ function Workspace({ username, onLogout }: { username: string; onLogout: () => v
                   <div className="bug-actions">
                     {bug.allowed_transitions.length === 0 ? <span className="done-note">✓ Completed · Done is final</span>
                       : bug.allowed_transitions.map(next => (
-                        <button className="secondary" key={next} disabled={updating !== null || creating} onClick={() => changeStatus(bug, next)}>
+                        <button className="secondary" key={next} disabled={updating !== null || creating || loading} onClick={() => changeStatus(bug, next)}>
                           {updating === bug.id ? 'Saving…' : next === 'In Progress' && bug.status === 'Ready for QA' ? 'Return to In Progress' : `Move to ${next}`}
                         </button>
                       ))}
                   </div>
-                  <BugHistory bugId={bug.id} status={bug.status} />
+                  <BugHistory bugId={bug.id} status={bug.status} refresh={refresh} />
                 </article>
               ))}</div>}
           </section>

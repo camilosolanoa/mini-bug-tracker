@@ -4,7 +4,7 @@ import type { Status } from './api';
 
 type Entry = { id: number; from_status: Status | null; to_status: Status; actor: string; changed_at: string };
 
-export default function BugHistory({ bugId, status }: { bugId: number; status: Status }) {
+export default function BugHistory({ bugId, status, refresh }: { bugId: number; status: Status; refresh: number }) {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -21,7 +21,7 @@ export default function BugHistory({ bugId, status }: { bugId: number; status: S
       .catch(error => { if (!controller.signal.aborted) setError(error.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [open, bugId, status, retry]);
+  }, [open, bugId, status, refresh, retry]);
 
   return <div className="history">
     <button className="history-toggle" aria-expanded={open} aria-controls={`history-${bugId}`} onClick={() => setOpen(value => !value)}>
