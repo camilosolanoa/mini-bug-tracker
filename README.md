@@ -116,14 +116,15 @@ server-side session revocation and per-user accounts are future improvements.
 ## Checks
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest backend/test_api.py -q
+.\.venv\Scripts\python.exe -m pytest backend -q
 cd frontend
 npm run build
 ```
 
 Tests cover all 16 status pairs, creation/validation, filters, persistence, login/logout,
 route protection, tampered cookies, history, concurrent updates, and rollback if a history
-write fails. Expected transitions are listed independently from application code.
+write fails. Frontend-serving tests ensure refreshing after deployment uses the latest
+HTML entrypoint. Expected transitions are listed independently from application code.
 
 To run the same tests on PostgreSQL, set `TEST_DATABASE_URL` to a **direct/unpooled**
 connection string before running pytest. Each test creates and drops a uniquely named

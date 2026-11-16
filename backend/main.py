@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import insert, select, update
@@ -71,7 +72,8 @@ def serialize_bug(row) -> dict:
     return {**row, "allowed_transitions": TRANSITIONS[row["status"]]}
 
 
-def create_app(database_path: str | Path | None = None, *, database_url: str | None = None) -> FastAPI:
+def create_app(database_path: str | Path | None = None, *, database_url: str | None = None,
+               frontend_directory: Path | None = None) -> FastAPI:
     engine = make_engine(database_path, database_url)
     secret = os.environ.get("SESSION_SECRET")
     if os.environ.get("VERCEL") and not secret:
@@ -139,8 +141,15 @@ def create_app(database_path: str | Path | None = None, *, database_url: str | N
             return list(db.execute(select(history).where(history.c.bug_id == bug_id).order_by(history.c.id)).mappings())
 
     # After `npm run build`, one Python process can serve the app and API.
-    frontend = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    frontend = frontend_directory or Path(__file__).resolve().parent.parent / "frontend" / "dist"
     if frontend.is_dir():
+        @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+        @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)
+        def frontend_index():
+            # Always fetch the current entrypoint; asset filenames contain content hashes.
+            return HTMLResponse((frontend / "index.html").read_text(encoding="utf-8"),
+                                headers={"Cache-Control": "no-store"})
+
         app.mount("/", StaticFiles(directory=frontend, html=True), name="frontend")
     return app
 
