@@ -35,9 +35,12 @@ For frontend development, keep the backend running and run `npm run dev` inside
 
 ## Architecture
 
-```text
-React + TypeScript -> HTTP/JSON -> FastAPI -> SQLAlchemy Core -> SQLite or PostgreSQL
-  forms and lists                  login, validation, rules      persistent data
+```mermaid
+flowchart LR
+    A["React + TypeScript<br/>Forms, list, filters"] -->|"HTTP / JSON"| B["FastAPI<br/>Validation + status rules"]
+    B -->|"SQL"| C[("SQLite locally<br/>PostgreSQL online")]
+    C --> B
+    B -->|"JSON response"| A
 ```
 
 When a user changes status:
