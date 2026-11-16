@@ -1,0 +1,4 @@
+-r ../requirements.txt
+httpx2==2.16.2
+pytest==9.2.0
+python-dotenv==1.2.4

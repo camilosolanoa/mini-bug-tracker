@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.db
+*.db-*
+node_modules/
+dist/
+output/
+.playwright-cli/
+
+.vercel
+.env*
