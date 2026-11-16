@@ -12,10 +12,10 @@ export default function BugHistory({ bugId, status, refresh }: { bugId: number; 
     <button className="link" aria-expanded={open} onClick={() => setOpen(value => !value)}>
       {open ? 'Hide history' : 'View history'}
     </button>
-    {open && <div aria-live="polite">
-      {history.loading && <p>Loading history…</p>}
+    {open && <div aria-live="polite" aria-busy={history.loading}>
+      {history.loading && history.data === null && <p>Loading history…</p>}
       {history.error && <p role="alert">{history.error} <button onClick={history.reload}>Retry</button></p>}
-      {!history.loading && !history.error && (history.data?.length ? <ol>
+      {history.data !== null && !history.error && (history.data.length ? <ol>
         {history.data.map(entry => <li key={entry.id}>
           <strong>{entry.from_status ? `${entry.from_status} → ${entry.to_status}` : `Created as ${entry.to_status}`}</strong>
           <span className="muted">{entry.actor} · <time dateTime={entry.changed_at}>{new Date(entry.changed_at).toLocaleString()}</time></span>

@@ -74,10 +74,8 @@ function Workspace({ username, onLogout }: { username: string; onLogout: () => v
   async function changeStatus(bug: Bug, next: Status) {
     setUpdating(bug.id);
     setError('');
-    setNotice('');
     try {
       await request(`/bugs/${bug.id}/status`, jsonBody('PATCH', { status: next }));
-      setNotice(`Bug #${bug.id} moved to ${next}.`);
     } catch (error) {
       setError(message(error));
     } finally {
@@ -133,22 +131,21 @@ function Workspace({ username, onLogout }: { username: string; onLogout: () => v
           <button onClick={list.reload} disabled={list.loading}>Refresh</button>
           {(status || severity) && <button onClick={clearFilters}>Clear filters</button>}
         </div>
-        {list.loading && <p role="status">Loading bugs…</p>}
         {list.error && <p className="error" role="alert">{list.error}</p>}
-        {!list.loading && !list.error && <p className="muted">
-          {bugs.length ? `${bugs.length} bug${bugs.length === 1 ? '' : 's'}` : 'No bugs found. Create one or adjust the filters.'}
+        {!list.error && <p className="muted" role="status">
+          {list.data === null ? 'Loading bugs…' : bugs.length ? `${bugs.length} bug${bugs.length === 1 ? '' : 's'}` : 'No bugs found. Create one or adjust the filters.'}
         </p>}
         {!list.error && bugs.map(bug => <article className="panel bug" key={bug.id}>
           <h3>{bug.title}</h3>
           <p className="description">{bug.description}</p>
           <p className="metadata">
-            <span>#{bug.id}</span><span>{bug.status}</span><span>{bug.severity} severity</span><span>{bug.assignee || 'Unassigned'}</span>
+            <span>#{bug.id}</span><span role="status">{bug.status}</span><span>{bug.severity} severity</span><span>{bug.assignee || 'Unassigned'}</span>
           </p>
-          <div className="actions">
+          <div className="actions" aria-busy={updating === bug.id}>
             {bug.allowed_transitions.length === 0 ? <span className="muted">Completed · Done is final</span>
               : bug.allowed_transitions.map(next => <button key={next}
                 disabled={updating !== null || creating || list.loading} onClick={() => changeStatus(bug, next)}>
-                {updating === bug.id ? 'Saving…' : next === 'In Progress' && bug.status === 'Ready for QA'
+                {next === 'In Progress' && bug.status === 'Ready for QA'
                   ? 'Return to In Progress' : `Move to ${next}`}
               </button>)}
           </div>

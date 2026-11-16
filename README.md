@@ -143,6 +143,14 @@ connection string before running pytest. Each test creates and drops a uniquely 
 schema, leaving application tables untouched. The database role needs schema privileges.
 GitHub Actions runs the SQLite API tests and frontend build on pushes and pull requests.
 
+With the local app running, this browser check creates a sample bug and verifies that
+status updates keep the layout and existing history stable while requests are pending:
+
+```powershell
+npx --yes --package @playwright/cli playwright-cli open http://127.0.0.1:8001
+npx --yes --package @playwright/cli playwright-cli run-code --filename frontend/checks/status-layout.js
+```
+
 Browser demo: sign in, create a bug, filter it, move through QA, return it to In Progress,
 complete it, inspect its history, reload, and sign out. In `/docs`, try reopening the Done
 bug and show the backend's 409 response.
