@@ -28,6 +28,7 @@ I focused on the required behavior and keeping the code easy to understand.”
 - `backend/auth.py`: the demo login; a signed cookie identifies the session.
 - `frontend/src/api.ts`: TypeScript types and the HTTP helper.
 - `frontend/src/App.tsx`: form, filters, loading/errors, and status buttons.
+- `frontend/src/useGet.ts`: one shared GET helper for session, list, and history loading.
 - `backend/test_api.py`: all allowed and rejected status pairs plus persistence and filtering.
 
 “The backend sends allowed next statuses with each bug. That keeps the rule in

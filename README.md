@@ -89,7 +89,19 @@ missing bugs **404**; unauthenticated access **401**. Invalid changes create no 
 - **Public demo:** credentials are intentionally published for reviewers. All users share
   the workspace; use sample data only. This demonstrates login, not private team isolation.
 - **Small components:** backend API/rules, database definitions, and login are separate;
-  React has dedicated login and history components. No global state library.
+  React has dedicated login and history components. One `useGet` hook handles loading,
+  errors, retry, and cancellation for the session, list, and history. The interface uses
+  plain forms and a bug list, with no UI or global state library.
+
+### Frontend reading order
+
+1. `App.tsx`: checks the session, displays the form/list, and handles create/status requests.
+2. `api.ts`: sends HTTP requests and turns backend errors into readable messages.
+3. `useGet.ts`: loads data when a URL changes or `reload()` is called, cancelling old requests.
+4. `Login.tsx` and `BugHistory.tsx`: the two small optional features.
+
+The hook keeps previous data while refreshing, so an open history panel stays open.
+Its `version` counter also tells open history panels to reload when the bug list is refreshed.
 
 ## Configuration and deployment
 
