@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useGet } from './useGet';
 import type { Status } from './api';
 
-type Entry = { id: number; from_status: Status | null; to_status: Status; actor: string; changed_at: string };
+type Entry = { id: number; from_status: Status | null; to_status: Status; actor: string; changed_at: string; reason: string | null };
 
 export default function BugHistory({ bugId, status, refresh }: { bugId: number; status: Status; refresh: number }) {
   const [open, setOpen] = useState(false);
@@ -18,6 +18,7 @@ export default function BugHistory({ bugId, status, refresh }: { bugId: number; 
       {history.data !== null && !history.error && (history.data.length ? <ol>
         {history.data.map(entry => <li key={entry.id}>
           <strong>{entry.from_status ? `${entry.from_status} → ${entry.to_status}` : `Created as ${entry.to_status}`}</strong>
+          {entry.reason && <p className="description">{entry.reason}</p>}
           <span className="muted">{entry.actor} · <time dateTime={entry.changed_at}>{new Date(entry.changed_at).toLocaleString()}</time></span>
         </li>)}
       </ol> : <p>No recorded changes yet. This bug predates history tracking.</p>)}

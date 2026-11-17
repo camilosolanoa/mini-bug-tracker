@@ -13,7 +13,7 @@ from sqlalchemy import insert, select, update
 from starlette.middleware.sessions import SessionMiddleware
 
 from backend.auth import auth_router, require_user
-from backend.database import bugs, history, make_engine, metadata
+from backend.database import bugs, history, initialize_database, make_engine
 
 
 Status = Literal["Open", "In Progress", "Ready for QA", "Done"]
@@ -24,7 +24,7 @@ TRANSITIONS: dict[str, list[Status]] = {
     "Open": ["In Progress"],
     "In Progress": ["Ready for QA"],
     "Ready for QA": ["In Progress", "Done"],
-    "Done": [],
+    "Done": ["Open"],
 }
 
 
@@ -43,8 +43,9 @@ class BugCreate(BaseModel):
 
 
 class StatusChange(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     status: Status
+    reason: str | None = Field(default=None, min_length=1, max_length=2000)
 
 
 class Bug(BugCreate):
@@ -59,6 +60,7 @@ class HistoryEntry(BaseModel):
     from_status: Status | None
     to_status: Status
     actor: str
+    reason: str | None
     changed_at: datetime
 
     @field_validator("changed_at")
@@ -81,7 +83,7 @@ def create_app(database_path: str | Path | None = None, *, database_url: str | N
 
     @asynccontextmanager
     async def lifespan(app):
-        metadata.create_all(engine)
+        initialize_database(engine)
         yield
         engine.dispose()
 
@@ -123,13 +125,18 @@ def create_app(database_path: str | Path | None = None, *, database_url: str | N
             current = row["status"]
             allowed = TRANSITIONS[current]
             if change.status not in allowed:
-                explanation = f"Allowed next statuses: {', '.join(allowed)}." if allowed else "Done is final."
+                explanation = f"Allowed next statuses: {', '.join(allowed)}."
                 raise HTTPException(409, f"Cannot change status from {current} to {change.status}. {explanation}")
+            if current == "Done" and not change.reason:
+                raise HTTPException(422, "A reason is required to reopen a Done bug.")
             # Only update if the status is still the one we validated.
             result = db.execute(update(bugs).where(bugs.c.id == bug_id, bugs.c.status == current).values(status=change.status))
             if result.rowcount != 1:
                 raise HTTPException(409, "Another request changed this bug. Refresh and try again.")
-            db.execute(insert(history).values(bug_id=bug_id, from_status=current, to_status=change.status, actor=username))
+            db.execute(insert(history).values(
+                bug_id=bug_id, from_status=current, to_status=change.status,
+                actor=username, reason=change.reason,
+            ))
             # Both writes commit together; failure rolls back both.
             return serialize_bug({**row, "status": change.status})
 

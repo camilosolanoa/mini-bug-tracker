@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, MetaData, String, Table, Text, create_engine, event
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, MetaData, String, Table, Text, create_engine, event, inspect
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.pool import NullPool
 
@@ -25,8 +25,20 @@ history = Table(
     Column("from_status", String(20)),
     Column("to_status", String(20), nullable=False),
     Column("actor", String(80), nullable=False),
+    Column("reason", Text),
     Column("changed_at", DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)),
 )
+
+
+def initialize_database(engine):
+    metadata.create_all(engine)
+    # Add the nullable field to existing installations without changing old events.
+    with engine.begin() as db:
+        if engine.dialect.name == "sqlite":
+            db.exec_driver_sql("BEGIN IMMEDIATE")
+        if "reason" not in {column["name"] for column in inspect(db).get_columns("status_history")}:
+            optional = "IF NOT EXISTS " if engine.dialect.name == "postgresql" else ""
+            db.exec_driver_sql(f"ALTER TABLE status_history ADD COLUMN {optional}reason TEXT")
 
 
 def make_engine(database_path: str | Path | None = None, database_url: str | None = None):

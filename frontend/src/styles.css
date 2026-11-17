@@ -28,6 +28,7 @@ button:disabled { opacity: .6; cursor: wait; }
 .metadata { font-size: 13px; color: #536a5c; }
 .metadata span { background: #edf2ee; border-radius: 4px; padding: 5px 8px; overflow-wrap: anywhere; }
 .actions { margin: 18px 0; }
+.reopen { width: 100%; }
 .muted { color: #63756a; font-size: 13px; line-height: 1.6; }
 .success, .error { padding: 12px 16px; border-radius: 5px; }
 .success { background: #e0efe5; color: #235738; }

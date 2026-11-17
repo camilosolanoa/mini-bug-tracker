@@ -89,7 +89,7 @@ def test_create_defaults_and_trimmed_fields(client):
     ("Ready for QA", "In Progress", True),
     ("Ready for QA", "Ready for QA", False),
     ("Ready for QA", "Done", True),
-    ("Done", "Open", False),
+    ("Done", "Open", True),
     ("Done", "In Progress", False),
     ("Done", "Ready for QA", False),
     ("Done", "Done", False),
@@ -100,7 +100,10 @@ def test_status_rules(client, current, target, allowed):
     for status in path[1:path.index(current) + 1]:
         assert client.patch(f"/api/bugs/{bug['id']}/status", json={"status": status}).status_code == 200
 
-    response = client.patch(f"/api/bugs/{bug['id']}/status", json={"status": target})
+    payload = {"status": target}
+    if current == "Done" and target == "Open":
+        payload["reason"] = "Checkout still fails on mobile after the fix."
+    response = client.patch(f"/api/bugs/{bug['id']}/status", json=payload)
     assert response.status_code == (200 if allowed else 409)
     if not allowed:
         assert current in response.json()["detail"]
@@ -108,7 +111,72 @@ def test_status_rules(client, current, target, allowed):
     saved = client.get("/api/bugs").json()[0]
     assert saved["status"] == (target if allowed else current)
     if saved["status"] == "Done":
-        assert saved["allowed_transitions"] == []
+        assert saved["allowed_transitions"] == ["Open"]
+
+
+@pytest.mark.parametrize("reason", [None, "", "   ", "x" * 2001])
+def test_reopening_requires_a_valid_reason_without_changing_data(client, reason):
+    bug = create_bug(client)
+    path = f"/api/bugs/{bug['id']}/status"
+    for status in ["In Progress", "Ready for QA", "Done"]:
+        assert client.patch(path, json={"status": status}).status_code == 200
+    before = client.get(f"/api/bugs/{bug['id']}/history").json()
+    payload = {"status": "Open"}
+    if reason is not None:
+        payload["reason"] = reason
+    response = client.patch(path, json=payload)
+    assert response.status_code == 422
+    assert "reason" in response.text.lower()
+    assert client.get("/api/bugs").json()[0]["status"] == "Done"
+    assert client.get(f"/api/bugs/{bug['id']}/history").json() == before
+
+
+def test_reopening_records_trimmed_reason_and_allows_the_workflow_again(client):
+    bug = create_bug(client)
+    path = f"/api/bugs/{bug['id']}/status"
+    for status in ["In Progress", "Ready for QA", "Done"]:
+        assert client.patch(path, json={"status": status}).status_code == 200
+    response = client.patch(path, json={"status": "Open", "reason": "  Fix fails on Safari.  "})
+    assert response.status_code == 200
+    assert response.json()["status"] == "Open"
+    assert response.json()["allowed_transitions"] == ["In Progress"]
+    entries = client.get(f"/api/bugs/{bug['id']}/history").json()
+    assert all(entry["reason"] is None for entry in entries[:-1])
+    assert entries[-1]["from_status"] == "Done"
+    assert entries[-1]["to_status"] == "Open"
+    assert entries[-1]["reason"] == "Fix fails on Safari."
+    assert entries[-1]["actor"] == "reviewer"
+    assert client.patch(path, json={"status": "In Progress"}).status_code == 200
+
+
+def test_existing_database_is_upgraded_and_history_is_preserved(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "legacy.db"
+    with sqlite3.connect(path) as db:
+        db.executescript("""
+            CREATE TABLE bugs (id INTEGER PRIMARY KEY, title TEXT NOT NULL,
+                description TEXT NOT NULL, severity TEXT NOT NULL, assignee TEXT,
+                status TEXT NOT NULL DEFAULT 'Open');
+            CREATE TABLE status_history (id INTEGER PRIMARY KEY, bug_id INTEGER NOT NULL,
+                from_status TEXT, to_status TEXT NOT NULL, actor TEXT NOT NULL,
+                changed_at DATETIME NOT NULL);
+            INSERT INTO bugs VALUES (1, 'Checkout', 'Safari checkout fails', 'High', NULL, 'Done');
+            INSERT INTO status_history VALUES
+                (1, 1, 'Ready for QA', 'Done', 'reviewer', '2026-11-16 12:00:00');
+        """)
+    with TestClient(create_app(database_path=path)) as browser:
+        login(browser)
+        assert browser.get("/api/bugs/1/history").json()[0]["reason"] is None
+        assert browser.patch("/api/bugs/1/status", json={
+            "status": "Open", "reason": "Safari still fails.",
+        }).status_code == 200
+    with TestClient(create_app(database_path=path)) as browser:
+        login(browser)
+        entries = browser.get("/api/bugs/1/history").json()
+        assert len(entries) == 2
+        assert entries[0]["to_status"] == "Done"
+        assert entries[1]["reason"] == "Safari still fails."
 
 
 def test_filters_individually_and_together(client):
@@ -192,7 +260,7 @@ def test_history_tracks_creation_and_qa_return_only_when_saved(client):
     path = ["In Progress", "Ready for QA", "In Progress", "Ready for QA", "Done"]
     for status in path:
         assert client.patch(f"/api/bugs/{bug['id']}/status", json={"status": status}).status_code == 200
-    assert client.patch(f"/api/bugs/{bug['id']}/status", json={"status": "Open"}).status_code == 409
+    assert client.patch(f"/api/bugs/{bug['id']}/status", json={"status": "In Progress"}).status_code == 409
     history = client.get(f"/api/bugs/{bug['id']}/history").json()
     assert [(e["from_status"], e["to_status"]) for e in history] == [
         (None, "Open"), ("Open", "In Progress"), ("In Progress", "Ready for QA"),
@@ -203,18 +271,32 @@ def test_history_tracks_creation_and_qa_return_only_when_saved(client):
     assert client.get("/api/bugs/999/history").status_code == 404
 
 
-def test_simultaneous_updates_create_only_one_history_entry(client):
+@pytest.mark.parametrize("reopen", [False, True])
+def test_simultaneous_updates_create_only_one_history_entry(client, reopen):
     bug = create_bug(client)
+    if reopen:
+        for status in ["In Progress", "Ready for QA", "Done"]:
+            assert client.patch(f"/api/bugs/{bug['id']}/status", json={"status": status}).status_code == 200
+    before = client.get(f"/api/bugs/{bug['id']}/history").json()
+    payload = {"status": "Open", "reason": "The fix failed."} if reopen else {"status": "In Progress"}
     def move():
-        return client.patch(f"/api/bugs/{bug['id']}/status", json={"status": "In Progress"}).status_code
+        return client.patch(f"/api/bugs/{bug['id']}/status", json=payload).status_code
     with ThreadPoolExecutor(max_workers=2) as pool:
         responses = list(pool.map(lambda _: move(), range(2)))
     assert sorted(responses) == [200, 409]
-    assert [e["to_status"] for e in client.get(f"/api/bugs/{bug['id']}/history").json()] == ["Open", "In Progress"]
+    entries = client.get(f"/api/bugs/{bug['id']}/history").json()
+    assert entries[:-1] == before
+    assert entries[-1]["to_status"] == payload["status"]
+    assert entries[-1]["reason"] == payload.get("reason")
 
 
-def test_history_write_failure_rolls_back_status(client):
+@pytest.mark.parametrize("reopen", [False, True])
+def test_history_write_failure_rolls_back_status(client, reopen):
     bug = create_bug(client)
+    if reopen:
+        for status in ["In Progress", "Ready for QA", "Done"]:
+            assert client.patch(f"/api/bugs/{bug['id']}/status", json={"status": status}).status_code == 200
+    before = client.get(f"/api/bugs/{bug['id']}/history").json()
     engine = client.app.state.engine
     def fail_history_write(connection, cursor, statement, parameters, context, executemany):
         if context.isinsert and context.compiled.statement.table.name == "status_history":
@@ -222,11 +304,12 @@ def test_history_write_failure_rolls_back_status(client):
     event.listen(engine, "before_cursor_execute", fail_history_write)
     try:
         with pytest.raises(RuntimeError, match="history storage failure"):
-            client.patch(f"/api/bugs/{bug['id']}/status", json={"status": "In Progress"})
+            payload = {"status": "Open", "reason": "The fix failed."} if reopen else {"status": "In Progress"}
+            client.patch(f"/api/bugs/{bug['id']}/status", json=payload)
     finally:
         event.remove(engine, "before_cursor_execute", fail_history_write)
-    assert client.get("/api/bugs").json()[0]["status"] == "Open"
-    assert len(client.get(f"/api/bugs/{bug['id']}/history").json()) == 1
+    assert client.get("/api/bugs").json()[0]["status"] == ("Done" if reopen else "Open")
+    assert client.get(f"/api/bugs/{bug['id']}/history").json() == before
 
 
 def test_forged_session_is_rejected(client):

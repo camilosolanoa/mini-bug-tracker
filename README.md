@@ -53,7 +53,7 @@ When a user changes status:
 6. React reloads the filtered list. History is fetched when its panel is opened.
 
 Two tables: `bugs` stores current details; `status_history` stores the previous/next
-status, actor, and UTC timestamp. Existing local bugs are preserved; historical events
+status, actor, UTC timestamp, and optional reason. Existing local bugs are preserved; historical events
 from before this feature are not invented or backfilled.
 
 ## Workflow and API
@@ -64,9 +64,17 @@ Open -> In Progress -> Ready for QA -> Done
            +----------------+
 ```
 
-New bugs start Open; Done is final. Skips, unsupported backwards moves, and same-status
+New bugs start Open. Done bugs can be reopened to Open with a required explanation
+(1–2,000 characters after trimming). The reason appears in history. This requested
+extension changes the original assignment's rule that Done is final.
+
+Skips, unsupported backwards moves, and same-status
 requests return **409 Conflict** with a clear explanation. Invalid input returns **422**;
 missing bugs **404**; unauthenticated access **401**. Invalid changes create no history.
+
+Reopen with `PATCH /api/bugs/{id}/status` and
+`{"status":"Open","reason":"The fix still fails on Safari."}`. Missing or blank reasons
+return **422**. The status and reason are saved together in one transaction.
 
 | Request | Purpose |
 | --- | --- |
@@ -120,6 +128,8 @@ The build installs and bundles the React app. Add a **Neon Free** database to th
 Vercel project and set `SESSION_SECRET` as a secret environment variable, then deploy.
 Vercel deployments require `DATABASE_URL`; they never silently fall back to a local file.
 Secrets and local databases are excluded from Git and deployment uploads.
+Startup adds a nullable `reason` column to existing history tables. Older events remain
+unchanged and show no reason. The upgrade works with SQLite and PostgreSQL.
 The current deployment is managed with `vercel deploy --prod` from the project folder.
 Automatic GitHub deployments are not connected; they require a GitHub login connection
 in the Vercel account. GitHub Actions checks still run automatically.
@@ -155,8 +165,8 @@ npx --yes --package @playwright/cli playwright-cli run-code --filename frontend/
 ```
 
 Browser demo: sign in, create a bug, filter it, move through QA, return it to In Progress,
-complete it, inspect its history, reload, and sign out. In `/docs`, try reopening the Done
-bug and show the backend's 409 response.
+complete it, reopen it with a reason, inspect its history, reload, and sign out.
+In `/docs`, try reopening a Done bug without a reason and show the backend's 422 response.
 
 ## With more time
 

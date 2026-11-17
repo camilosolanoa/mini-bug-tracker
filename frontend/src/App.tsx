@@ -71,17 +71,27 @@ function Workspace({ username, onLogout }: { username: string; onLogout: () => v
     }
   }
 
-  async function changeStatus(bug: Bug, next: Status) {
+  async function changeStatus(bug: Bug, next: Status, reason?: string) {
     setUpdating(bug.id);
     setError('');
     try {
-      await request(`/bugs/${bug.id}/status`, jsonBody('PATCH', { status: next }));
+      await request(`/bugs/${bug.id}/status`, jsonBody('PATCH', { status: next, reason }));
     } catch (error) {
       setError(message(error));
     } finally {
       list.reload();
       setUpdating(null);
     }
+  }
+
+  function reopenBug(event: FormEvent<HTMLFormElement>, bug: Bug) {
+    event.preventDefault();
+    const reason = String(new FormData(event.currentTarget).get('reason') ?? '').trim();
+    if (!reason) {
+      setError('A reason is required to reopen a Done bug.');
+      return;
+    }
+    void changeStatus(bug, 'Open', reason);
   }
 
   return <main>
@@ -142,8 +152,15 @@ function Workspace({ username, onLogout }: { username: string; onLogout: () => v
             <span>#{bug.id}</span><span role="status">{bug.status}</span><span>{bug.severity} severity</span><span>{bug.assignee || 'Unassigned'}</span>
           </p>
           <div className="actions" aria-busy={updating === bug.id}>
-            {bug.allowed_transitions.length === 0 ? <span className="muted">Completed · Done is final</span>
-              : bug.allowed_transitions.map(next => <button key={next}
+            {bug.allowed_transitions.map(next => next === 'Open' && bug.status === 'Done'
+              ? <form className="reopen" key={next} onSubmit={event => reopenBug(event, bug)}>
+                <fieldset disabled={updating !== null || creating || list.loading}>
+                  <label htmlFor={`reopen-reason-${bug.id}`}>Reason for reopening</label>
+                  <textarea id={`reopen-reason-${bug.id}`} name="reason" required maxLength={2000} rows={2} />
+                  <button type="submit">{updating === bug.id ? 'Reopening…' : 'Reopen bug'}</button>
+                </fieldset>
+              </form>
+              : <button key={next}
                 disabled={updating !== null || creating || list.loading} onClick={() => changeStatus(bug, next)}>
                 {next === 'In Progress' && bug.status === 'Ready for QA'
                   ? 'Return to In Progress' : `Move to ${next}`}
